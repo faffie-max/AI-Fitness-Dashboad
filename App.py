@@ -1,4 +1,4 @@
-import streamlit as st
+no import streamlit as st
 import pandas as pd
 import openai
 import os
@@ -83,7 +83,8 @@ if hevy_file:
                                     {"role": "user", "content": f"Analyze this workout data snippet for progressive overload patterns:\n{data_snippet}"}
                                 ]
                             )
-                            st.write(response.choices.message.content)
+                            st.write(response.choices[0].message.content)
+
                 else:
                     st.error("❌ OpenAI Developer Key is missing from Advanced settings.")
             else:
