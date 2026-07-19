@@ -7,7 +7,6 @@ import plotly.express as px
 st.set_page_config(page_title="AI Strength Dashboard", layout="wide")
 st.title("🏋️‍♂️ Personal AI Strength Analytics")
 
-# Load Open AI Security Settings
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 openai.api_key = OPENAI_API_KEY
 
@@ -15,85 +14,69 @@ st.sidebar.header("Data Import Pipeline")
 hevy_file = st.sidebar.file_uploader("Upload your Hevy CSV", type="csv")
 
 if hevy_file:
-    st.success("🎯 File successfully uploaded to server memory. Beginning parsing...")
-    
-    # --- SMART DELIMITER LOOP FIX ---
-    # Tests commas, semicolons, and tabs to prevent silent formatting crashes
-    df = None
-    for separator in [',', ';', '\t']:
-        try:
-            hevy_file.seek(0) # Reset file reading pointer
-            test_df = pd.read_csv(hevy_file, sep=separator)
-            if len(test_df.columns) > 1: # If it split nicely into multiple columns, it worked!
-                df = test_df
-                st.info(f"⚙️ Successfully read file structure using character separator: '{separator}'")
-                break
-        except Exception:
-            continue
+    try:
+        # Load the CSV
+        df = pd.read_csv(hevy_file)
+        
+        # 1. Clean the Dates (Hevy uses 'created_at')
+        if 'created_at' in df.columns:
+            df['Date'] = pd.to_datetime(df['created_at']).dt.date
+        elif 'start_time' in df.columns:
+            df['Date'] = pd.to_datetime(df['start_time']).dt.date
+        else:
+            # Fallback if column names vary
+            date_col = next((c for c in df.columns if 'date' in c.lower() or 'time' in c.lower()), df.columns[0])
+            df['Date'] = pd.to_datetime(df[date_col]).dt.date
 
-    # Final backup check if file formatting is completely warped
-    if df is None:
-        try:
-            hevy_file.seek(0)
-            df = pd.read_csv(hevy_file, sep=None, engine='python')
-            st.info("⚙️ Used fallback engine to read formatting layout.")
-        except Exception as csv_error:
-            st.error(f"❌ Structural crash while opening spreadsheet: {csv_error}")
+        # 2. Find Weight and Reps Columns
+        weight_col = next((c for c in df.columns if 'weight' in c.lower()), None)
+        reps_col = next((c for c in df.columns if 'reps' in c.lower()), None)
+        exercise_col = next((c for c in df.columns if 'exercise' in c.lower() or 'title' in c.lower()), None)
 
-    # --- PROCESS UNIFIED DATA ---
-    if df is not None:
-        try:
-            # Render a fallback data inspector tab so you can visually verify the content
-            with st.expander("🔍 RAW DATAFRAME INSPECTOR (Troubleshooting)", expanded=True):
-                st.write("Detected Columns:", list(df.columns))
-                st.dataframe(df.head(10), use_container_width=True)
+        if weight_col and reps_col:
+            # Calculate total volume per set
+            df['set_volume'] = pd.to_numeric(df[weight_col], errors='coerce').fillna(0) * pd.to_numeric(df[reps_col], errors='coerce').fillna(0)
+            
+            # Group by clean Date column
+            daily_volume = df.groupby('Date')['set_volume'].sum().reset_index()
+            daily_volume.columns = ['Date', 'Total Volume']
+            daily_volume = daily_volume.sort_values(by='Date')
+            
+            # 3. Render the Line Chart
+            st.subheader("📈 Mechanical Progressive Overload Trend")
+            fig = px.line(daily_volume, x='Date', y='Total Volume', markers=True,
+                         title="Workout Volume Timeline Progression")
+            fig.update_layout(xaxis_type='category') # Forces clear calendar dates on the bottom axis
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Show Raw Data Summary Table
+            with st.expander("📊 View Cleaned Data Summary"):
+                st.dataframe(daily_volume, use_container_width=True)
+        else:
+            st.warning("⚠️ Could not calculate volume. Ensure columns for weight and reps exist.")
 
-            # Auto-detect target data columns by looking for matching characters
-            date_col = next((c for c in df.columns if 'date' in c.lower() or 'time' in c.lower()), None)
-            weight_col = next((c for c in df.columns if 'weight' in c.lower()), None)
-            reps_col = next((c for c in df.columns if 'reps' in c.lower()), None)
-            exercise_col = next((c for c in df.columns if 'exercise' in c.lower() or 'title' in c.lower()), None)
-
-            if date_col and weight_col and reps_col:
-                # Format cleaning parameters
-                df['clean_date'] = pd.to_datetime(df[date_col], errors='coerce').dt.date
-                df['clean_weight'] = pd.to_numeric(df[weight_col], errors='coerce').fillna(0)
-                df['clean_reps'] = pd.to_numeric(df[reps_col], errors='coerce').fillna(0)
-                
-                # Math calculation for absolute mechanical load
-                df['set_volume'] = df['clean_weight'] * df['clean_reps']
-                daily_volume = df.groupby('clean_date')['set_volume'].sum().reset_index()
-                daily_volume.columns = ['Date', 'Total Volume Calculated']
-                
-                # Render interactive progress dashboard chart
-                st.subheader("📈 Mechanical Progressive Overload Trend")
-                fig = px.line(daily_volume, x='Date', y='Total Volume Calculated', markers=True)
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # Render operational AI analysis text area blocks
-                st.subheader("🤖 AI Strength Coach Insights")
-                if OPENAI_API_KEY:
-                    if st.button("Generate AI Training Load Report"):
-                        with st.spinner("Analyzing parameters..."):
-                            data_snippet = df[[date_col, exercise_col, weight_col, reps_col]].dropna().head(30).to_string(index=False)
-                            response = openai.chat.completions.create(
-                                model="gpt-4o",
-                                messages=[
-                                    {"role": "system", "content": "You are an elite strength conditioning coach."},
-                                    {"role": "user", "content": f"Analyze this workout data snippet for progressive overload patterns:\n{data_snippet}"}
-                                ]
-                            )
-                            st.write(response.choices[0].message.content)
-
-                else:
-                    st.error("❌ OpenAI Developer Key is missing from Advanced settings.")
+        # 4. Generative AI Coaching Engine
+        st.subheader("🤖 AI Strength Coach Insights")
+        if st.button("Generate AI Training Load Report"):
+            if OPENAI_API_KEY:
+                with st.spinner("Analyzing your volume progression and training layout..."):
+                    # Pass a clean structured summary to the AI to prevent layout token crashes
+                    dataset_string = df[['created_at', exercise_col, weight_col, reps_col]].dropna().head(40).to_string(index=False)
+                    
+                    response = openai.chat.completions.create(
+                        model="gpt-4o",
+                        messages=[
+                            {"role": "system", "content": "You are an elite sports scientist and strength conditioning coach."},
+                            {"role": "user", "content": f"Analyze this user gym workout history spanning June 29 to July 17. Evaluate their exercise selection, check if their weight volume shows proper progressive overload, and provide actionable coaching advice:\n{dataset_string}"}
+                        ]
+                    )
+                    st.write(response.choices[0].message.content)
             else:
-                st.warning("⚠️ Data structure loaded, but standard workout columns (date, weight, reps) are missing.")
-
-        except Exception as pipeline_error:
-            st.error(f"❌ Error during chart compilation logic: {pipeline_error}")
-else:
-    st.info("👈 Open the sidebar menu and upload your `workout_data_hevy.csv` file to begin.")
-
+                st.error("❌ OpenAI Developer Key is missing from Advanced settings.")
                 
+    except Exception as e:
+        st.error(f"Error parsing spreadsheet layout: {e}")
+else:
+    st.info("👈 Use the sidebar to upload your Hevy CSV file.")
+
                 
