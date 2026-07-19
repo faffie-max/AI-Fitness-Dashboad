@@ -83,7 +83,8 @@ if hevy_file:
                             {"role": "user", "content": f"Analyze this user gym workout text dataset block from June 29 to July 17. Extract the exercises, evaluate if their progression shows proper progressive overload across these 9 sessions, and provide actionable coaching advice:\n{text_data_snippet}"}
                         ]
                     )
-                    st.write(response.choices.message.content)
+                st.write(response.choices[0].message.content)
+
             else:
                 st.error("❌ OpenAI Developer Key is missing from Advanced settings.")
                 
