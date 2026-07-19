@@ -16,7 +16,8 @@ hevy_file = st.sidebar.file_uploader("Upload your Hevy CSV", type="csv")
 if hevy_file:
     try:
         # Load the CSV file cleanly
-        df = pd.read_csv(hevy_file)
+        df = pd.read_csv(hevy_file, sep=';')
+
         
         # Display the column dropdown troubleshooting checklist
         with st.expander("🔍 Inspect Data Headers"):
