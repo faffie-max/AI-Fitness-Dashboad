@@ -67,7 +67,7 @@ if hevy_file:
                 
                 # Render interactive progress dashboard chart
                 st.subheader("📈 Mechanical Progressive Overload Trend")
-                fig = px.line(daily_summary, x='Date', y='Total Volume Calculated', markers=True)
+                fig = px.line(daily_volume, x='Date', y='Total Volume Calculated', markers=True)
                 st.plotly_chart(fig, use_container_width=True)
                 
                 # Render operational AI analysis text area blocks
