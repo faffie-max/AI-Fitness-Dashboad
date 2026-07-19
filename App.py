@@ -1,4 +1,4 @@
-no import streamlit as st
+import streamlit as st
 import pandas as pd
 import openai
 import os
