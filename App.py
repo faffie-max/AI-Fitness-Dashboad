@@ -8,7 +8,7 @@ import plotly.express as px
 from datetime import datetime, timedelta
 
 st.set_page_config(page_title="Automated AI Fitness Coach", layout="wide")
-st.title("🏋️‍♂️ 100% Automated AI Fitness Analytics")
+st.title("🏋️‍♂️ RoyFit AI Fitness Analytics")
 
 # 1. Load Background Security Secrets
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
