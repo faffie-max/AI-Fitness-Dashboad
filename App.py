@@ -2,68 +2,86 @@ import streamlit as st
 import pandas as pd
 import openai
 import os
+import requests
+from requests.auth import HTTPBasicAuth
 import plotly.express as px
+from datetime import datetime, timedelta
 
-st.set_page_config(page_title="AI Strength Dashboard", layout="wide")
-st.title("🏋️‍♂️ Personal AI Strength Analytics")
+st.set_page_config(page_title="Automated AI Fitness Coach", layout="wide")
+st.title("🏋️‍♂️ 100% Automated AI Fitness Analytics")
 
+# 1. Load Background Security Secrets
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+ATHLETE_ID = os.environ.get("INTERVALS_ATHLETE_ID")
+INTERVALS_KEY = os.environ.get("INTERVALS_API_KEY")
 openai.api_key = OPENAI_API_KEY
 
-st.sidebar.header("Data Import Pipeline")
-hevy_file = st.sidebar.file_uploader("Upload your Hevy CSV", type="csv")
-
-if hevy_file:
-    try:
-        # Load the CSV file cleanly
-        df = pd.read_csv(hevy_file)
+# 2. Establish Automated Live Background Streamer
+@st.cache_data(ttl=600) # Caches data for 10 minutes so it loads instantly without crashing APIs
+def fetch_live_intervals_data():
+    if not ATHLETE_ID or not INTERVALS_KEY:
+        st.error("❌ Missing Intervals.icu credentials in Streamlit Advanced Settings.")
+        return None
         
-        # Display the column dropdown troubleshooting checklist
-        with st.expander("🔍 Inspect Data Headers"):
-            st.write("File Columns Detected:", list(df.columns))
-            st.dataframe(df.head(5))
+    # Calculate a rolling historical lookback window (Past 30 days)
+    old_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+    now_date = datetime.now().strftime('%Y-%m-%d')
+    
+    # Secure API Call directly into your Intervals account
+    url = f"https://intervals.icu/api/v1/athlete/{ATHLETE_ID}/activities"
+    params = {"oldest": old_date, "newest": now_date}
+    
+    # Intervals.icu uses basic authentication (API_KEY as username)
+    response = requests.get(url, params=params, auth=HTTPBasicAuth('API_KEY', INTERVALS_KEY))
+    
+    if response.status_code == 200:
+        return pd.DataFrame(response.json())
+    else:
+        st.error(f"❌ Failed to stream live data. API Status Code: {response.status_code}")
+        return None
 
-        # Dynamically map the columns by case-insensitive name matching
-        date_col = next((c for c in df.columns if 'date' in c.lower() or 'time' in c.lower() or 'created' in c.lower()), None)
-        weight_col = next((c for c in df.columns if 'weight' in c.lower()), None)
-        reps_col = next((c for c in df.columns if 'reps' in c.lower()), None)
-        exercise_col = next((c for c in df.columns if 'exercise' in c.lower() or 'title' in c.lower()), None)
+# 3. Process the Streaming Pipeline
+df = fetch_live_intervals_data()
 
-        if date_col and weight_col and reps_col:
-            # Clean formats
-            df['clean_date'] = pd.to_datetime(df[date_col]).dt.date
-            df['volume'] = pd.to_numeric(df[weight_col], errors='coerce').fillna(0) * pd.to_numeric(df[reps_col], errors='coerce').fillna(0)
-            
-            # Group rows cleanly by date column
-            daily_summary = df.groupby('clean_date')['volume'].sum().reset_index()
-            daily_summary.columns = ['Date', 'Total Volume Calculated']
-            daily_summary = daily_summary.sort_values(by='Date')
-
-            # Render the Line Chart
-            st.subheader("📈 Mechanical Progressive Overload Trend")
-            fig = px.line(daily_summary, x='Date', y='Total Volume Calculated', markers=True,
-                         title="Workout Volume Timeline Progression")
-            fig.update_layout(xaxis_type='category')
+if df is not None and not df.empty:
+    st.success("⚡ Live background data stream synchronized successfully!")
+    
+    try:
+        # Standardize live dates and core workout parameters
+        df['Clean_Date'] = pd.to_datetime(df['start_date_local']).dt.date
+        df = df.sort_values(by='Clean_Date')
+        
+        # Isolate Training Load (TRIMP) metrics and Workout Type
+        load_col = 'icu_training_load' if 'icu_training_load' in df.columns else 'training_load'
+        type_col = 'type' if 'type' in df.columns else 'name'
+        
+        # 4. Draw Interactive Progress Dashboards
+        st.subheader("📈 Live Physical Stress & Strain Progression")
+        
+        if load_col in df.columns:
+            fig = px.bar(df, x='Clean_Date', y=load_col, color=type_col if type_col in df.columns else None,
+                         title="Daily Workout Training Stress (TRIMP Metrics)",
+                         labels={load_col: "Training Load Score (TRIMP)"})
             st.plotly_chart(fig, use_container_width=True)
             
-            # Show Raw Summary
-            st.dataframe(daily_summary, use_container_width=True)
-        else:
-            st.warning("⚠️ Data loaded but target columns weren't automatically matched.")
-
-        # --- AI Engine ---
-        st.subheader("🤖 AI Strength Coach Insights")
+            # Show Clean Activity History List
+            with st.expander("📋 View Synchronized Activity Feed"):
+                display_cols = [c for c in ['Clean_Date', type_col, load_col, 'moving_time'] if c in df.columns]
+                st.dataframe(df[display_cols], use_container_width=True)
+        
+        # 5. Generative AI Coaching Engine
+        st.subheader("🤖 AI Strength & Endurance Coach Insights")
         if st.button("Generate AI Training Load Report"):
             if OPENAI_API_KEY:
-                with st.spinner("Analyzing volume progression parameters..."):
-                    # Send up clean historical table layout string straight to GPT-4o
-                    dataset_string = daily_summary.to_string(index=False)
+                with st.spinner("Analyzing live training load progression parameters..."):
+                    # Compress data layout rows into plain text string for the AI coach
+                    data_summary_string = df[['Clean_Date', type_col, load_col]].dropna().to_string(index=False)
                     
                     response = openai.chat.completions.create(
                         model="gpt-4o",
                         messages=[
-                            {"role": "system", "content": "You are an elite sports scientist and strength conditioning coach."},
-                            {"role": "user", "content": f"Analyze this user 3-week gym workout history volume totals. Check if their progression indicates proper progressive overload, and provide clear coaching feedback:\n{dataset_string}"}
+                            {"role": "system", "content": "You are an elite sports scientist analyzing real-time training loads (TRIMP metrics)."},
+                            {"role": "user", "content": f"Review this automated 30-day training stress data. Assess if my workout progression is optimized for safe progression without risking injury or overtraining, and give clear, direct advice on volume adjustments:\n{data_summary_string}"}
                         ]
                     )
                     st.write(response.choices[0].message.content)
@@ -71,6 +89,6 @@ if hevy_file:
                 st.error("❌ OpenAI Developer Key is missing from Advanced settings.")
                 
     except Exception as e:
-        st.error(f"Error reading layout: {e}")
+        st.error(f"Processing Error: {e}")
 else:
-    st.info("👈 Use the sidebar to upload your Hevy CSV file.")
+    st.info("🔄 Syncing data stream... Ensure your credentials are typed inside your app secrets panel.")
