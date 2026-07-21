@@ -18,13 +18,13 @@ INTERVALS_KEY = os.environ.get("INTERVALS_API_KEY")
 openai.api_key = OPENAI_API_KEY
 
 # 2. Establish Automated Live Background Streamer
-@st.cache_data(ttl=120) # Caches data for 2 minutes
+@st.cache_data(ttl=60) # Fast 1-minute caching
 def fetch_live_intervals_data():
     if not ATHLETE_ID or not INTERVALS_KEY:
         st.error("❌ Missing Intervals.icu credentials in Streamlit Advanced Settings.")
         return None
         
-    old_date = (datetime.now() - timedelta(days=35)).strftime('%Y-%m-%d')
+    old_date = (datetime.now() - timedelta(days=35)).strftime('%Y-%m-%d') # Rolling 5-week history
     now_date = datetime.now().strftime('%Y-%m-%d')
     
     url = f"https://intervals.icu/api/v1/athlete/{ATHLETE_ID}/activities"
@@ -51,31 +51,28 @@ if df is not None and not df.empty:
         
         load_col = 'icu_training_load' if 'icu_training_load' in df.columns else 'training_load'
         type_col = 'type' if 'type' in df.columns else 'name'
-        desc_col = 'description' if 'description' in df.columns else 'description'
         
-        # --- BROAD HEVY DATA EXTRACTION ---
-        # Catches 'WeightLifting', 'Gym', 'Strength', 'Workout', or anything from Hevy case-insensitively
+        # --- NATIVE HEVY TEXT LOGGER MATRIX ---
         hevy_workouts = []
         for idx, row in df.iterrows():
             activity_type = str(row.get(type_col, '')).lower()
             activity_name = str(row.get('name', '')).lower()
-            activity_desc = str(row.get(desc_col, '')).lower()
             
-            # Check if this row represents a strength training session
-            if any(word in activity_type or word in activity_name or word in activity_desc for word in ['lift', 'weight', 'strength', 'gym', 'hevy', 'squat', 'press']):
+            # Identify any fitness activity that matches your weightlifting profiles
+            if any(w in activity_type or w in activity_name for w in ['lift', 'weight', 'strength', 'gym', 'hevy', 'workout']):
                 duration_mins = row.get('moving_time', 0) / 60
                 calories_burned = row.get('calories', 0)
                 trimp_score = row.get(load_col, 0)
-                notes_summary = row.get('notes', row.get('comment', row.get(desc_col, 'No detailed exercise notes found.')))
-
+                
+                # Dynamic fallback strategy to scan every possible notes folder for your raw texts
+                raw_exercises = row.get('notes', row.get('comment', row.get('description', 'No details available.')))
                 
                 hevy_workouts.append({
-                    "Date": row['Clean_Date'],
-                    "Workout Name": row.get('name', 'Hevy Strength Session'),
-                    "Duration (Mins)": round(duration_mins, 1),
-                    "Calories": calories_burned,
-                    "Cardio TRIMP": trimp_score,
-                    "Logged Exercises": notes_summary # Attaches your text logs (e.g. 3x10 Box Squats) straight to the dataset
+                    "Date": str(row['Clean_Date']),
+                    "Workout": row.get('name', 'Strength Session'),
+                    "Duration": f"{round(duration_mins, 1)}m",
+                    "TRIMP": trimp_score,
+                    "Exercises": str(raw_exercises).strip()
                 })
 
         # 4. Draw Interactive Progress Dashboards
@@ -92,14 +89,7 @@ if df is not None and not df.empty:
         if hevy_workouts:
             hevy_df = pd.DataFrame(hevy_workouts)
             st.subheader("💪 Hevy Strength Training Analytics (Over 1 Month)")
-            
-            fig_hevy = px.line(hevy_df, x='Date', y='Duration (Mins)', markers=True,
-                             title="Logged Weightlifting Duration Progression (Mins)",
-                             labels={"Duration (Mins)": "Time Lifted (Minutes)"})
-            st.plotly_chart(fig_hevy, use_container_width=True)
-            
-            with st.expander("📋 View Clean Synchronized Hevy Records"):
-                st.dataframe(hevy_df, use_container_width=True)
+            st.dataframe(hevy_df, use_container_width=True)
         else:
             st.info("💡 Tip: Today's metrics loaded! Your Hevy timeline will display as soon as your latest workout completes syncing through HealthFit.")
 
@@ -107,20 +97,24 @@ if df is not None and not df.empty:
         st.subheader("🤖 AI Strength & Endurance Coach Insights")
         if st.button("Generate AI Training Load Report"):
             if OPENAI_API_KEY:
-                with st.spinner("Analyzing historical logs and individual exercise descriptions..."):
+                with st.spinner("Analyzing historical lifting data text files..."):
                     
-                    raw_activity_summary = df[['Clean_Date', type_col, load_col]].dropna().to_string(index=False)
-                    hevy_summary = pd.DataFrame(hevy_workouts).to_string(index=False) if hevy_workouts else "No strength metadata isolated."
+                    # Convert your workout data block directly into a massive plain text layout
+                    if hevy_workouts:
+                        formatted_hevy_data = ""
+                        for hw in hevy_workouts:
+                            formatted_hevy_data += f"Date: {hw['Date']} | Name: {hw['Workout']} | TRIMP: {hw['TRIMP']}\n Lifts logged:\n{hw['Exercises']}\n-------------------\n"
+                    else:
+                        formatted_hevy_data = "No explicit workout metadata logs isolated."
                     
                     response = openai.chat.completions.create(
                         model="gpt-4o",
                         messages=[
-                            {"role": "system", "content": "You are an elite sports scientist analyzing athletic recovery metrics and training load stress. You pay close attention to exercise selection, sets, reps, and specific weights."},
-                            {"role": "user", "content": f"Review this 1-month fitness history log block. Look closely at the 'Logged Exercises' field in the second block to review their actual lifts (like Box Squats, Lat Pull Downs, sets, reps, and weights).\n\n1. CARDIAC STRAIN (TRIMP):\n{raw_activity_summary}\n\n2. HEVY LOG WORKOUT TIMELINE WITH DETAILED EXERCISES:\n{hevy_summary}\n\nCompare the results across this month. Explicitly name the exercises they performed. Assess if their lifting volume and durations indicate stable progressive overload, cross-reference against their cardiovascular TRIMP load spikes to ensure safe fatigue management, and provide structured coaching feedback:"}
+                            {"role": "system", "content": "You are RoyFit, an elite strength conditioning scientist. You read gym tracking descriptions (like 3x10 Box Squats @ 80kg) to critique muscular progressive overload limits across a month."},
+                            {"role": "user", "content": f"Review this exercise training log payload containing my literal weightlifting logs from the past month:\n\n{formatted_hevy_data}\n\nTask: Explicitly look at the text listed under 'Lifts logged:'. Identify specific exercise names (like Box Squats, Lat Pull Downs, etc.), check their historical weight progression over the 4-week window, and provide a clear, actionable analysis of my progressive overload trend."}
                         ]
                     )
                     st.write(response.choices[0].message.content)
-
             else:
                 st.error("❌ OpenAI Developer Key is missing from Advanced settings.")
                 
