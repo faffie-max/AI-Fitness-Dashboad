@@ -26,8 +26,7 @@ def fetch_live_intervals_data():
         
     old_date = (datetime.now() - timedelta(days=35)).strftime('%Y-%m-%d') # Grabs past 5 weeks of history
     now_date = datetime.now().strftime('%Y-%m-%d')
-    
-   url = f"https://intervals.icu/api/v1/athlete/{ATHLETE_ID}/activities"
+    url = f"https://intervals.icu/api/v1/athlete/{ATHLETE_ID}/activities"
     params = {"oldest": old_date, "newest": now_date}
     
     response = requests.get(url, params=params, auth=HTTPBasicAuth('API_KEY', INTERVALS_KEY))
