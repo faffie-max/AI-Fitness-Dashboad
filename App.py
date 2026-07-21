@@ -119,7 +119,8 @@ if df is not None and not df.empty:
                             {"role": "user", "content": f"Review this 1-month fitness history log block. Look closely at the 'Logged Exercises' field in the second block to review their actual lifts (like Box Squats, Lat Pull Downs, sets, reps, and weights).\n\n1. CARDIAC STRAIN (TRIMP):\n{raw_activity_summary}\n\n2. HEVY LOG WORKOUT TIMELINE WITH DETAILED EXERCISES:\n{hevy_summary}\n\nCompare the results across this month. Explicitly name the exercises they performed. Assess if their lifting volume and durations indicate stable progressive overload, cross-reference against their cardiovascular TRIMP load spikes to ensure safe fatigue management, and provide structured coaching feedback:"}
                         ]
                     )
-                    st.write(response.choices.message.content)
+                    st.write(response.choices[0].message.content)
+
             else:
                 st.error("❌ OpenAI Developer Key is missing from Advanced settings.")
                 
