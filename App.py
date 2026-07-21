@@ -29,7 +29,7 @@ def fetch_live_intervals_data():
     now_date = datetime.now().strftime('%Y-%m-%d')
     
     # FIXED: Corrected path layout with API versioning routing
-    url = f"https://intervals.org{ATHLETE_ID}/activities"
+    url = f"https://intervals.icu/api/v1/athlete/{ATHLETE_ID}/activities"
     params = {"oldest": old_date, "newest": now_date}
     
     # Secure API Call using raw string token authentication
