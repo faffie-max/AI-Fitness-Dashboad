@@ -1,4 +1,4 @@
-
+I'm
 import streamlit as st
 import pandas as pd
 import openai
@@ -67,7 +67,8 @@ if df is not None and not df.empty:
                 duration_mins = row.get('moving_time', 0) / 60
                 calories_burned = row.get('calories', 0)
                 trimp_score = row.get(load_col, 0)
-                notes_summary = row.get(desc_col, 'No detailed exercise notes found.')
+                notes_summary = row.get('notes', row.get('comment', row.get(desc_col, 'No detailed exercise notes found.')))
+
                 
                 hevy_workouts.append({
                     "Date": row['Clean_Date'],
