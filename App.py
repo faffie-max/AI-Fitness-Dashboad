@@ -154,7 +154,7 @@ if df is not None and not df.empty:
                             *st.session_state.messages
                         ]
                     )
-                    response_text = chat_response.choices.message.content
+                    response_text = chat_response.choices[0].message.content
                     st.markdown(response_text)
             st.session_state.messages.append({"role": "assistant", "content": response_text})
                 
