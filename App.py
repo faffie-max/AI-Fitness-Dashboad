@@ -13,7 +13,7 @@ st.set_page_config(page_title="RoyFit AI Coach", layout="wide")
 st.title("🏋️‍♂️ RoyFit AI Analytics & Strength Tracker")
 st.markdown("*Bring **IT** back to fitness*")
 
-# --- NEW: DYNAMIC INSPIRATIONAL QUOTES LIST ---
+# --- DYNAMIC INSPIRATIONAL QUOTES LIST ---
 quotes = [
     "🔥 'The only bad workout is the one that didn't happen.'",
     "💪 'Progressive overload isn't just about weight. It's about showing up.'",
@@ -38,9 +38,7 @@ def fetch_live_intervals_data():
     old_date = (datetime.now() - timedelta(days=35)).strftime('%Y-%m-%d')
     now_date = datetime.now().strftime('%Y-%m-%d')
     
-
     url = f"https://intervals.icu/api/v1/athlete/{ATHLETE_ID}/activities"
-
     params = {"oldest": old_date, "newest": now_date}
     
     response = requests.get(url, params=params, auth=HTTPBasicAuth('API_KEY', INTERVALS_KEY))
@@ -64,15 +62,15 @@ if df is not None and not df.empty:
         
         load_col = 'icu_training_load' if 'icu_training_load' in df.columns else 'training_load'
         type_col = 'type' if 'type' in df.columns else 'name'
+        desc_col = 'description' if 'description' in df.columns else 'description'
         
-            # --- NATIVE HEVY TONNAGE PARSING FIX ---
+        # --- NATIVE HEVY TONNAGE PARSING ---
         hevy_workouts = []
         for idx, row in df.iterrows():
             duration_mins = row.get('moving_time', 0) / 60
             trimp_score = row.get(load_col, 0)
             
-            # 1. Grab native total volume direct from Intervals/Hevy integration keys
-            # Checks 'total_elevation_gain' (where strength weight often stores) or fallback load multiplication
+            # Grab native total volume direct from Intervals/Hevy integration keys
             native_tonnage = row.get('total_elevation_gain', 0)
             
             if native_tonnage == 0:
@@ -92,11 +90,9 @@ if df is not None and not df.empty:
 
         hevy_df = pd.DataFrame(hevy_workouts)
 
-
         # 4. Draw Interactive Progress Dashboards
         st.subheader("📈 Live Physical Stress & Strain Progression")
         
-        # Tab view to cleanly separate data layout streams on small phone screens
         tab1, tab2 = st.tabs(["🫀 Cardio Strain (TRIMP)", "💪 Strength Tonnage (Volume)"])
         
         with tab1:
@@ -106,7 +102,6 @@ if df is not None and not df.empty:
                 st.plotly_chart(fig_load, use_container_width=True)
                 
         with tab2:
-            # NEW: Mechanical Tonnage Progression Line Chart
             fig_ton = px.line(hevy_df, x='Date', y='Total Tonnage Moved (kg)', markers=True,
                              title="Total Workout Tonnage Progression Timeline (Sets x Reps x Weight)",
                              line_shape="spline", color_discrete_sequence=['#FF4B4B'])
@@ -128,21 +123,19 @@ if df is not None and not df.empty:
                             {"role": "user", "content": f"Review my complete 1-month fitness totals tracking my physical lift mechanical volume tonnage:\n\n{formatted_hevy_data}\n\nAssess my progressive overload trend and suggest a target volume goal for next week:"}
                         ]
                     )
-                    st.write(response.choices[0].message.content)
+                    st.write(response.choices.message.content)
             else:
                 st.error("❌ OpenAI Developer Key is missing from Advanced settings.")
 
-        # --- NEW: ACTIVE CHATBOT INTERACTIVE CONSOLE ---
+        # --- ACTIVE CHATBOT INTERACTIVE CONSOLE ---
         st.subheader("💬 Ask RoyFit AI Coach Anything")
         if "messages" not in st.session_state:
             st.session_state.messages = []
 
-        # Display previous chat logs
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-        # Process user chat questions input
         if prompt := st.chat_input("Ask about your workout, rest, or lifting techniques..."):
             with st.chat_message("user"):
                 st.markdown(prompt)
@@ -157,7 +150,7 @@ if df is not None and not df.empty:
                             *st.session_state.messages
                         ]
                     )
-                    response_text = chat_response.choices[0].message.content
+                    response_text = chat_response.choices.message.content
                     st.markdown(response_text)
             st.session_state.messages.append({"role": "assistant", "content": response_text})
                 
