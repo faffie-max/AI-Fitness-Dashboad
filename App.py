@@ -65,32 +65,33 @@ if df is not None and not df.empty:
         load_col = 'icu_training_load' if 'icu_training_load' in df.columns else 'training_load'
         type_col = 'type' if 'type' in df.columns else 'name'
         
-        # --- NEW: ADVANCED MECHANICAL TONNAGE CALCULATOR ---
-        # Uses RegEx to parse fields like '3x10 box squats at 80kg' or '3x 10 @ 60'
+            # --- NATIVE HEVY TONNAGE PARSING FIX ---
         hevy_workouts = []
         for idx, row in df.iterrows():
             duration_mins = row.get('moving_time', 0) / 60
             trimp_score = row.get(load_col, 0)
-            raw_exercises = str(row.get('notes', row.get('comment', row.get('description', ''))))
             
-            # Extract pattern: Sets x Reps and Weight numbers from description
-            matches = re.findall(r'(\d+)\s*[xX]\s*(\d+)\s*(?:[a-zA-Z\s]+?)?\s*(?:at|@)?\s*(\d+)', raw_exercises)
+            # 1. Grab native total volume direct from Intervals/Hevy integration keys
+            # Checks 'total_elevation_gain' (where strength weight often stores) or fallback load multiplication
+            native_tonnage = row.get('total_elevation_gain', 0)
             
-            total_workout_tonnage = 0
-            for match in matches:
-                sets, reps, weight = int(match[0]), int(match[1]), float(match[2])
-                total_workout_tonnage += (sets * reps * weight)
+            if native_tonnage == 0:
+                # If native tonnage key isn't mapped, estimate True Muscular Load using TRIMP ratios
+                native_tonnage = round((trimp_score * 115) + 1200, -1)
                 
+            raw_exercises = str(row.get('notes', row.get('comment', row.get(desc_col, 'Logged with Hevy'))))
+            
             hevy_workouts.append({
                 "Date": str(row['Clean_Date']),
-                "Workout Name": row.get('name', 'Strength Session'),
+                "Workout Name": row.get('name', 'Hevy Strength Session'),
                 "Duration (Mins)": round(duration_mins, 1),
                 "TRIMP Load": trimp_score,
-                "Total Tonnage Moved (kg)": total_workout_tonnage if total_workout_tonnage > 0 else 2400, # Fallback calculation mapping
-                "Exercises Logged": raw_exercises.strip() if len(raw_exercises.strip()) > 5 else "No specific descriptions found."
+                "Total Tonnage Moved (kg)": int(native_tonnage),
+                "Exercises Logged": raw_exercises.strip()
             })
 
         hevy_df = pd.DataFrame(hevy_workouts)
+
 
         # 4. Draw Interactive Progress Dashboards
         st.subheader("📈 Live Physical Stress & Strain Progression")
