@@ -39,7 +39,7 @@ def fetch_live_intervals_data():
     now_date = datetime.now().strftime('%Y-%m-%d')
     
 
-    url = f"url = f"https://intervals.icu/api/v1/athlete/{ATHLETE_ID}/activities"
+    url = f"https://intervals.icu/api/v1/athlete/{ATHLETE_ID}/activities"
 
     params = {"oldest": old_date, "newest": now_date}
     
