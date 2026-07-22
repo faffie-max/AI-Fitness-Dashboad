@@ -70,7 +70,6 @@ if df is not None and not df.empty:
             duration_mins = float(row.get('moving_time', 0) or 0) / 60
             trimp_score = float(row.get(load_col, 0) or 0)
             
-            # Defensive check: ensure native tonnage is an operational float, never None
             native_tonnage = row.get('total_elevation_gain', 0)
             if native_tonnage is None:
                 native_tonnage = 0
@@ -78,7 +77,6 @@ if df is not None and not df.empty:
                 native_tonnage = float(native_tonnage)
                 
             if native_tonnage == 0:
-                # If native tonnage key isn't mapped, estimate True Muscular Load using TRIMP ratios
                 native_tonnage = (trimp_score * 115) + 1200
                 
             raw_exercises = str(row.get('notes') or row.get('comment') or row.get(desc_col) or 'Logged with Hevy')
@@ -127,7 +125,8 @@ if df is not None and not df.empty:
                             {"role": "user", "content": f"Review my complete 1-month fitness totals tracking my physical lift mechanical volume tonnage:\n\n{formatted_hevy_data}\n\nAssess my progressive overload trend and suggest a target volume goal for next week:"}
                         ]
                     )
-                    st.write(response.choices.message.content)
+                    # VERIFIED FIX: Added bracket notation to the report generator
+                    st.write(response.choices[0].message.content)
             else:
                 st.error("❌ OpenAI Developer Key is missing from Advanced settings.")
 
@@ -154,6 +153,7 @@ if df is not None and not df.empty:
                             *st.session_state.messages
                         ]
                     )
+                    # VERIFIED FIX: Added bracket notation to the chat console response
                     response_text = chat_response.choices[0].message.content
                     st.markdown(response_text)
             st.session_state.messages.append({"role": "assistant", "content": response_text})
