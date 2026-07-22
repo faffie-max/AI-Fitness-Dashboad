@@ -64,26 +64,30 @@ if df is not None and not df.empty:
         type_col = 'type' if 'type' in df.columns else 'name'
         desc_col = 'description' if 'description' in df.columns else 'description'
         
-        # --- NATIVE HEVY TONNAGE PARSING ---
+        # --- CRASH-PROOF HEVY TONNAGE PARSING ---
         hevy_workouts = []
         for idx, row in df.iterrows():
-            duration_mins = row.get('moving_time', 0) / 60
-            trimp_score = row.get(load_col, 0)
+            duration_mins = float(row.get('moving_time', 0) or 0) / 60
+            trimp_score = float(row.get(load_col, 0) or 0)
             
-            # Grab native total volume direct from Intervals/Hevy integration keys
+            # Defensive check: ensure native tonnage is an operational float, never None
             native_tonnage = row.get('total_elevation_gain', 0)
-            
+            if native_tonnage is None:
+                native_tonnage = 0
+            else:
+                native_tonnage = float(native_tonnage)
+                
             if native_tonnage == 0:
                 # If native tonnage key isn't mapped, estimate True Muscular Load using TRIMP ratios
-                native_tonnage = round((trimp_score * 115) + 1200, -1)
+                native_tonnage = (trimp_score * 115) + 1200
                 
-            raw_exercises = str(row.get('notes', row.get('comment', row.get(desc_col, 'Logged with Hevy'))))
+            raw_exercises = str(row.get('notes') or row.get('comment') or row.get(desc_col) or 'Logged with Hevy')
             
             hevy_workouts.append({
                 "Date": str(row['Clean_Date']),
                 "Workout Name": row.get('name', 'Hevy Strength Session'),
                 "Duration (Mins)": round(duration_mins, 1),
-                "TRIMP Load": trimp_score,
+                "TRIMP Load": int(trimp_score),
                 "Total Tonnage Moved (kg)": int(native_tonnage),
                 "Exercises Logged": raw_exercises.strip()
             })
