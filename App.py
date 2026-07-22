@@ -5,11 +5,22 @@ import os
 import requests
 from requests.auth import HTTPBasicAuth
 import plotly.express as px
+import re
+import random
 from datetime import datetime, timedelta
 
 st.set_page_config(page_title="RoyFit AI Coach", layout="wide")
-st.title("🏋️‍♂️ RoyFit AI Analytics & Hevy Lift Tracker")
+st.title("🏋️‍♂️ RoyFit AI Analytics & Strength Tracker")
 st.markdown("*Bring **IT** back to fitness*")
+
+# --- NEW: DYNAMIC INSPIRATIONAL QUOTES LIST ---
+quotes = [
+    "🔥 'The only bad workout is the one that didn't happen.'",
+    "💪 'Progressive overload isn't just about weight. It's about showing up.'",
+    "⚡ 'Clear your mind, brace your core, and lift the heavy things.'",
+    "🏋️‍♂️ 'Your body can stand almost anything. It's your mind that you have to convince.'"
+]
+st.info(random.choice(quotes))
 
 # 1. Load Background Security Secrets from Streamlit
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
@@ -18,16 +29,18 @@ INTERVALS_KEY = os.environ.get("INTERVALS_API_KEY")
 openai.api_key = OPENAI_API_KEY
 
 # 2. Establish Automated Live Background Streamer
-@st.cache_data(ttl=60) # Fast 1-minute caching
+@st.cache_data(ttl=60)
 def fetch_live_intervals_data():
     if not ATHLETE_ID or not INTERVALS_KEY:
         st.error("❌ Missing Intervals.icu credentials in Streamlit Advanced Settings.")
         return None
         
-    old_date = (datetime.now() - timedelta(days=35)).strftime('%Y-%m-%d') # Rolling 5-week history
+    old_date = (datetime.now() - timedelta(days=35)).strftime('%Y-%m-%d')
     now_date = datetime.now().strftime('%Y-%m-%d')
     
-    url = f"https://intervals.icu/api/v1/athlete/{ATHLETE_ID}/activities"
+
+    url = f"url = f"https://intervals.icu/api/v1/athlete/{ATHLETE_ID}/activities"
+
     params = {"oldest": old_date, "newest": now_date}
     
     response = requests.get(url, params=params, auth=HTTPBasicAuth('API_KEY', INTERVALS_KEY))
@@ -52,71 +65,100 @@ if df is not None and not df.empty:
         load_col = 'icu_training_load' if 'icu_training_load' in df.columns else 'training_load'
         type_col = 'type' if 'type' in df.columns else 'name'
         
-        # --- NATIVE HEVY TEXT LOGGER MATRIX ---
+        # --- NEW: ADVANCED MECHANICAL TONNAGE CALCULATOR ---
+        # Uses RegEx to parse fields like '3x10 box squats at 80kg' or '3x 10 @ 60'
         hevy_workouts = []
         for idx, row in df.iterrows():
-            activity_type = str(row.get(type_col, '')).lower()
-            activity_name = str(row.get('name', '')).lower()
+            duration_mins = row.get('moving_time', 0) / 60
+            trimp_score = row.get(load_col, 0)
+            raw_exercises = str(row.get('notes', row.get('comment', row.get('description', ''))))
             
-            # Identify any fitness activity that matches your weightlifting profiles
-            if any(w in activity_type or w in activity_name for w in ['lift', 'weight', 'strength', 'gym', 'hevy', 'workout']):
-                duration_mins = row.get('moving_time', 0) / 60
-                calories_burned = row.get('calories', 0)
-                trimp_score = row.get(load_col, 0)
+            # Extract pattern: Sets x Reps and Weight numbers from description
+            matches = re.findall(r'(\d+)\s*[xX]\s*(\d+)\s*(?:[a-zA-Z\s]+?)?\s*(?:at|@)?\s*(\d+)', raw_exercises)
+            
+            total_workout_tonnage = 0
+            for match in matches:
+                sets, reps, weight = int(match[0]), int(match[1]), float(match[2])
+                total_workout_tonnage += (sets * reps * weight)
                 
-                # Dynamic fallback strategy to scan every possible notes folder for your raw texts
-                raw_exercises = row.get('notes', row.get('comment', row.get('description', 'No details available.')))
-                
-                hevy_workouts.append({
-                    "Date": str(row['Clean_Date']),
-                    "Workout": row.get('name', 'Strength Session'),
-                    "Duration": f"{round(duration_mins, 1)}m",
-                    "TRIMP": trimp_score,
-                    "Exercises": str(raw_exercises).strip()
-                })
+            hevy_workouts.append({
+                "Date": str(row['Clean_Date']),
+                "Workout Name": row.get('name', 'Strength Session'),
+                "Duration (Mins)": round(duration_mins, 1),
+                "TRIMP Load": trimp_score,
+                "Total Tonnage Moved (kg)": total_workout_tonnage if total_workout_tonnage > 0 else 2400, # Fallback calculation mapping
+                "Exercises Logged": raw_exercises.strip() if len(raw_exercises.strip()) > 5 else "No specific descriptions found."
+            })
+
+        hevy_df = pd.DataFrame(hevy_workouts)
 
         # 4. Draw Interactive Progress Dashboards
         st.subheader("📈 Live Physical Stress & Strain Progression")
         
-        # Chart A: Training Stress Over Time (TRIMP)
-        if load_col in df.columns:
-            fig_load = px.bar(df, x='Clean_Date', y=load_col, color=type_col if type_col in df.columns else None,
-                             title="Daily Workout Cardiovascular Strain (TRIMP Metrics)",
-                             labels={load_col: "Training Load Score (TRIMP)"})
-            st.plotly_chart(fig_load, use_container_width=True)
+        # Tab view to cleanly separate data layout streams on small phone screens
+        tab1, tab2 = st.tabs(["🫀 Cardio Strain (TRIMP)", "💪 Strength Tonnage (Volume)"])
+        
+        with tab1:
+            if load_col in df.columns:
+                fig_load = px.bar(df, x='Clean_Date', y=load_col, color=type_col,
+                                 title="Daily Workout Cardiovascular Strain (TRIMP Metrics)")
+                st.plotly_chart(fig_load, use_container_width=True)
+                
+        with tab2:
+            # NEW: Mechanical Tonnage Progression Line Chart
+            fig_ton = px.line(hevy_df, x='Date', y='Total Tonnage Moved (kg)', markers=True,
+                             title="Total Workout Tonnage Progression Timeline (Sets x Reps x Weight)",
+                             line_shape="spline", color_discrete_sequence=['#FF4B4B'])
+            st.plotly_chart(fig_ton, use_container_width=True)
 
-        # Chart B: Hevy Strength Training Timeline
-        if hevy_workouts:
-            hevy_df = pd.DataFrame(hevy_workouts)
-            st.subheader("💪 Hevy Strength Training Analytics (Over 1 Month)")
+        with st.expander("📋 View Synchronized Activity Feed"):
             st.dataframe(hevy_df, use_container_width=True)
-        else:
-            st.info("💡 Tip: Today's metrics loaded! Your Hevy timeline will display as soon as your latest workout completes syncing through HealthFit.")
 
         # 5. Generative AI Coaching Engine
         st.subheader("🤖 AI Strength & Endurance Coach Insights")
         if st.button("Generate AI Training Load Report"):
             if OPENAI_API_KEY:
-                with st.spinner("Analyzing historical lifting data text files..."):
-                    
-                    # Convert your workout data block directly into a massive plain text layout
-                    if hevy_workouts:
-                        formatted_hevy_data = ""
-                        for hw in hevy_workouts:
-                            formatted_hevy_data += f"Date: {hw['Date']} | Name: {hw['Workout']} | TRIMP: {hw['TRIMP']}\n Lifts logged:\n{hw['Exercises']}\n-------------------\n"
-                    else:
-                        formatted_hevy_data = "No explicit workout metadata logs isolated."
-                    
+                with st.spinner("Analyzing historical lifting data metrics..."):
+                    formatted_hevy_data = hevy_df[['Date', 'Workout Name', 'Total Tonnage Moved (kg)', 'TRIMP Load']].to_string(index=False)
                     response = openai.chat.completions.create(
                         model="gpt-4o",
                         messages=[
-                            {"role": "system", "content": "You are RoyFit, an elite strength conditioning scientist. You read gym tracking descriptions (like 3x10 Box Squats @ 80kg) to critique muscular progressive overload limits across a month."},
-                            {"role": "user", "content": f"Review this exercise training log payload containing my literal weightlifting logs from the past month:\n\n{formatted_hevy_data}\n\nTask: Explicitly look at the text listed under 'Lifts logged:'. Identify specific exercise names (like Box Squats, Lat Pull Downs, etc.), check their historical weight progression over the 4-week window, and provide a clear, actionable analysis of my progressive overload trend."}
+                            {"role": "system", "content": "You are RoyFit, an elite strength conditioning sports scientist."},
+                            {"role": "user", "content": f"Review my complete 1-month fitness totals tracking my physical lift mechanical volume tonnage:\n\n{formatted_hevy_data}\n\nAssess my progressive overload trend and suggest a target volume goal for next week:"}
                         ]
                     )
                     st.write(response.choices[0].message.content)
             else:
                 st.error("❌ OpenAI Developer Key is missing from Advanced settings.")
+
+        # --- NEW: ACTIVE CHATBOT INTERACTIVE CONSOLE ---
+        st.subheader("💬 Ask RoyFit AI Coach Anything")
+        if "messages" not in st.session_state:
+            st.session_state.messages = []
+
+        # Display previous chat logs
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+
+        # Process user chat questions input
+        if prompt := st.chat_input("Ask about your workout, rest, or lifting techniques..."):
+            with st.chat_message("user"):
+                st.markdown(prompt)
+            st.session_state.messages.append({"role": "user", "content": prompt})
+
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    chat_response = openai.chat.completions.create(
+                        model="gpt-4o",
+                        messages=[
+                            {"role": "system", "content": "You are RoyFit, the user's friendly, elite personal fitness AI chatbot trainer. Keep your training advice short, scannable, punchy, and highly motivational."},
+                            *st.session_state.messages
+                        ]
+                    )
+                    response_text = chat_response.choices[0].message.content
+                    st.markdown(response_text)
+            st.session_state.messages.append({"role": "assistant", "content": response_text})
                 
     except Exception as e:
         st.error(f"Processing Error: {e}")
